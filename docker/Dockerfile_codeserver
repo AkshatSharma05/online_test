@@ -1,20 +1,38 @@
-FROM ubuntu:16.04
+FROM python:3.7-slim
 
 MAINTAINER FOSSEE <pythonsupport@fossee.in>
 
-RUN apt-get update && \
-apt-get install git python3-pip libmysqlclient-dev sudo default-jre default-jdk -y 
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    sudo \
+    default-jre \
+    default-jdk \
+    default-libmysqlclient-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 VOLUME /Sites/online_test
 
-ADD Files/requirements-* /tmp/
+# Copy requirements
+# requirements files live in the repo's top-level `requirements/` directory
+ADD requirements/requirements-* /tmp/
 
-RUN pip3 install -r /tmp/requirements-codeserver.txt && mkdir -p /Sites/online_test/yaksh_data/output /Sites/online_test/yaksh_data/data
+# Upgrade pip first (IMPORTANT)
+RUN pip install --upgrade pip setuptools wheel
+
+# Install Python dependencies
+RUN pip install -r /tmp/requirements-codeserver.txt
+
+# Create directories
+RUN mkdir -p /Sites/online_test/yaksh_data/output \
+             /Sites/online_test/yaksh_data/data
 
 WORKDIR /Sites/online_test
 
-ADD Files/Start-codeserver.sh /Sites
+ADD docker/Files/Start-codeserver.sh /Sites/Start-codeserver.sh
+RUN chmod +x /Sites/Start-codeserver.sh
 
 EXPOSE 53579
 
-CMD [ "/bin/bash" , "/Sites/Start-codeserver.sh" ]
+CMD ["/Sites/Start-codeserver.sh"]

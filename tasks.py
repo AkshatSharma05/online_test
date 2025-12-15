@@ -12,7 +12,7 @@ from yaksh.settings import SERVER_POOL_PORT
 
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 TARGET_CONTAINER_NAME = 'yaksh_code_server'
-SRC_IMAGE_NAME = 'fossee/yaksh_codeserver'
+SRC_IMAGE_NAME = 'yaksh.codeserver:local'
 CHECK_FILE = 'server_running.txt'
 CHECK_FILE_PATH = os.path.join(SCRIPT_DIR, 'yaksh_data', CHECK_FILE)
 OS_NAME = sys.platform
