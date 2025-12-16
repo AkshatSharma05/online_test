@@ -1,7 +1,5 @@
 FROM python:3.7-slim
 
-MAINTAINER FOSSEE <pythonsupport@fossee.in>
-
 # System dependencies
 RUN apt-get update && apt-get install -y \
     git \
@@ -10,6 +8,22 @@ RUN apt-get update && apt-get install -y \
     default-jdk \
     default-libmysqlclient-dev \
     build-essential \
+    ca-certificates \
+    wget \
+    flex \
+    bison \
+    gperf \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-setuptools \
+    cmake \
+    ninja-build \
+    ccache \
+    libncurses-dev \
+    libffi-dev \
+    libssl-dev \
+    dfu-util \
     && rm -rf /var/lib/apt/lists/*
 
 VOLUME /Sites/online_test
@@ -27,6 +41,40 @@ RUN pip install -r /tmp/requirements-codeserver.txt
 # Create directories
 RUN mkdir -p /Sites/online_test/yaksh_data/output \
              /Sites/online_test/yaksh_data/data
+
+## Install ESP-IDF (Espressif IoT Development Framework)
+# Clone a stable release (change tag if you need a different version)
+RUN git clone --depth 1 --branch v5.5.1 https://github.com/espressif/esp-idf.git /opt/esp-idf \
+    && yes | /opt/esp-idf/install.sh esp32
+
+# Expose IDF_PATH for interactive shells and source export on login
+ENV IDF_PATH=/opt/esp-idf
+RUN printf 'if [ -f "/opt/esp-idf/export.sh" ]; then\n  . /opt/esp-idf/export.sh\nfi\n' > /etc/profile.d/esp-idf.sh \
+    && chmod +x /etc/profile.d/esp-idf.sh
+
+# Build QEMU with only the xtensa-softmmu target (required by MicroPython/QEMU runner)
+# This builds Espressif's QEMU fork and installs qemu-system-xtensa to /usr/local/bin
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    autoconf \
+    libtool \
+    pkg-config \
+    libglib2.0-dev \
+    libpixman-1-dev \
+    libslirp-dev \
+    libgcrypt20-dev \
+    zlib1g-dev \
+    libfdt-dev \
+    libcap-ng-dev \
+    libseccomp-dev \
+    gettext \
+    && git clone --depth 1 https://github.com/espressif/qemu.git /opt/qemu \
+    && cd /opt/qemu \
+    && ./configure --target-list=xtensa-softmmu \
+    && make -j"$(nproc)" \
+    && make install \
+    && cd / \
+    && rm -rf /opt/qemu \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /Sites/online_test
 
