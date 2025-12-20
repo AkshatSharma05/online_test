@@ -38,14 +38,14 @@ from .grader import Grader
 MY_DIR = abspath(dirname(__file__))
 
 
-# Private Protocol ##########
+# Private Protocol ########## Comment for now
 def run_as_nobody():
-    """Runs the current process as nobody."""
-    # Set the effective uid and to that of nobody.
-    nobody = pwd.getpwnam('nobody')
-    os.setegid(nobody.pw_gid)
-    os.seteuid(nobody.pw_uid)
-
+  #  """Runs the current process as nobody."""
+   # # Set the effective uid and to that of nobody.
+    #nobody = pwd.getpwnam('nobody')
+   # os.setegid(nobody.pw_gid)
+   # os.seteuid(nobody.pw_uid)
+    pass
 
 def check_code(pid, job_queue, results):
     """Check the code, this runs forever.

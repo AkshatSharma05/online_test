@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import subprocess, time, sys, threading, os, pty
-
+import signal #Change
 import argparse
 
 FIRMWARE = os.environ.get(
@@ -17,6 +17,15 @@ args = parser.parse_args()
 
 SCRIPT = args.script
 OUTPUT_FILE = args.output
+
+# Ensure output directory exists (Yaksh temp dir)
+if OUTPUT_FILE:
+    OUTPUT_FILE = os.path.abspath(OUTPUT_FILE)
+    try:
+        os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
+    except Exception as e:
+        sys.stderr.write(f"Failed to create output directory: {e}\n")
+
 
 # Validate firmware path before starting QEMU
 if not os.path.exists(FIRMWARE):
@@ -38,9 +47,19 @@ p = subprocess.Popen(
     stdout=slave,
     stderr=slave,
     text=True
+    preexec_fn=os.setsid,   # Used later for terminating qemu
 )
 
 output_buffer = ""
+#change
+def write_output():
+    if OUTPUT_FILE:
+        try:
+            with open(OUTPUT_FILE, 'w', encoding='utf-8') as out_f:
+                out_f.write(output_buffer)
+        except Exception as e:
+            sys.stderr.write(f"Failed to write output file: {e}\n")
+
 
 def reader():
     global output_buffer
@@ -104,8 +123,19 @@ while True:
         break
     time.sleep(0.1)
 
+# We have finished execution (DONE seen, QEMU exited, or timeout reached).
+# Forcefully terminate the entire QEMU process group
+try:
+    if p.poll() is None:
+        os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+except Exception:
+    pass
+
+
+
 # If an output file was requested, write the captured output to it.
 if OUTPUT_FILE:
+    OUTPUT_FILE = os.path.abspath(OUTPUT_FILE)
     try:
         with open(OUTPUT_FILE, 'w', encoding='utf-8') as out_f:
             out_f.write(output_buffer)
@@ -134,6 +164,8 @@ try:
     t.join(timeout=1.0)
 except Exception:
     pass
+finally:
+    write_output()
 
 # Ensure stdout is flushed and exit
 sys.stdout.flush()
