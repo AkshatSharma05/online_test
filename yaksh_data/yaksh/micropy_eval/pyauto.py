@@ -1,140 +1,200 @@
 #!/usr/bin/env python3
-import subprocess, time, sys, threading, os, pty
-
+import subprocess
+import time
+import sys
+import os
+import signal
 import argparse
 
+# ===================== LOGGING =====================
+
+def log(msg):
+    msg = str(msg)
+    print(msg)
+    sys.stderr.write(msg + "\n")
+    sys.stderr.flush()
+
+# ===================== CONFIG ======================
+
+DEFAULT_BOOT_WAIT = 1.0      # seconds
+DEFAULT_EXEC_TIME = 3.0      # seconds
+READ_CHUNK = 1024
+
 FIRMWARE = os.environ.get(
-    'PYAUTO_FIRMWARE',
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'firmware.bin')
+    "PYAUTO_FIRMWARE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "firmware.bin")
 )
 
-parser = argparse.ArgumentParser(description='Run MicroPython script under QEMU')
-parser.add_argument('script', nargs='?', default='./main.py',
-                    help='Path to MicroPython .py script to run')
-parser.add_argument('--output', '-o', dest='output', default=None,
-                    help='Optional file to write console output to')
+# ===================== ARGS ========================
+
+parser = argparse.ArgumentParser(
+    description="Run MicroPython script under QEMU (grader-safe)"
+)
+parser.add_argument(
+    "script",
+    nargs="?",
+    default="./main.py",
+    help="Path to MicroPython .py script"
+)
+parser.add_argument(
+    "-o", "--output",
+    dest="output",
+    default=None,
+    help="File to write console output"
+)
 args = parser.parse_args()
 
-SCRIPT = args.script
-OUTPUT_FILE = args.output
+SCRIPT = os.path.abspath(args.script)
+OUTPUT_FILE = os.path.abspath(args.output) if args.output else None
 
-# Validate firmware path before starting QEMU
+# ===================== VALIDATION ==================
+
+log("=== pyauto starting ===")
+log(f"Firmware path : {FIRMWARE}")
+log(f"Script path   : {SCRIPT}")
+log(f"Output file   : {OUTPUT_FILE}")
+
 if not os.path.exists(FIRMWARE):
-    sys.stderr.write(f"Firmware file not found: {FIRMWARE}\n")
+    log(f"ERROR: Firmware not found: {FIRMWARE}")
     sys.exit(2)
 
-# Create a pseudo-terminal pair
-master, slave = pty.openpty()
+if not os.path.exists(SCRIPT):
+    log(f"ERROR: Script not found: {SCRIPT}")
+    sys.exit(2)
 
-# Start QEMU process
-p = subprocess.Popen(
-    [
-        "qemu-system-xtensa",
-        "-nographic",
-        "-machine", "esp32",
-        "-drive", f"file={FIRMWARE},format=raw,if=mtd"
-    ],
-    stdin=slave,
-    stdout=slave,
-    stderr=slave,
-    text=True
-)
-
-output_buffer = ""
-
-def reader():
-    global output_buffer
-    while True:
-        try:
-            data = os.read(master, 1024).decode(errors="ignore")
-            if data:
-                output_buffer += data
-                print(data, end="")
-            else:
-                break
-        except:
-            break
-
-# Start async reader
-t = threading.Thread(target=reader, daemon=True)
-t.start()
-
-print("Waiting for MicroPython to finish booting...")
-
-# Wait for MicroPython boot completion
-while 'help()' not in output_buffer:
-    time.sleep(0.1)
-
-print("Boot complete. Waiting 0.5s for REPL to stabilize...")
-time.sleep(0.5)
-
-# Now REPL is stable → send Ctrl-E
-os.write(master, b"\x05")
-time.sleep(0.2)
-
-# Send the script contents
-with open(SCRIPT, "rb") as f:
-    os.write(master, f.read())
-
-time.sleep(0.2)
-
-# Send Ctrl-D to execute
-os.write(master, b"\x04")
-# After sending Ctrl-D, wait for an explicit completion marker ('done') from the guest
-# before writing output and exiting. Fallbacks: QEMU process exit or timeout.
-try:
-    TIMEOUT = int(os.environ.get('PYAUTO_TIMEOUT', '3'))
-except Exception:
-    TIMEOUT = 3
-
-wait_start = time.time()
-while True:
-    # Prefer an explicit completion marker from the guest: wait until 'done' appears
-    # in the console output. This ensures the script printed its final marker.
-    if 'DONE' in output_buffer:
-        # give a tiny moment for any trailing output to arrive
-        time.sleep(0.1)
-        break
-    # If QEMU process exited unexpectedly, proceed to write whatever we have
-    if p.poll() is not None:
-        break
-    # Timeout fallback
-    if time.time() - wait_start > TIMEOUT:
-        # timeout reached
-        break
-    time.sleep(0.1)
-
-# If an output file was requested, write the captured output to it.
 if OUTPUT_FILE:
     try:
-        with open(OUTPUT_FILE, 'w', encoding='utf-8') as out_f:
-            out_f.write(output_buffer)
+        os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
     except Exception as e:
-        # Best-effort: if writing fails, print a warning to stderr and continue
-        sys.stderr.write('Failed to write output file: {}\n'.format(e))
+        log(f"ERROR: Failed to create output directory: {e}")
+        sys.exit(2)
 
-# Try to terminate the QEMU process cleanly, then force-kill if necessary
+# ===================== START QEMU ==================
+
+log("Starting QEMU...")
+
+try:
+    p = subprocess.Popen(
+        [
+            "qemu-system-xtensa",
+            "-nographic",
+            "-machine", "esp32",
+            "-drive", f"file={FIRMWARE},format=raw,if=mtd"
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=0,
+        preexec_fn=os.setsid
+    )
+except Exception as e:
+    log(f"ERROR: Failed to start QEMU: {e}")
+    sys.exit(2)
+
+log(f"QEMU PID: {p.pid}")
+
+output_buffer = b""
+
+def read_available():
+    global output_buffer
+    try:
+        while True:
+            chunk = p.stdout.read(READ_CHUNK)
+            if not chunk:
+                break
+            output_buffer += chunk
+    except Exception:
+        pass
+
+# ===================== BOOT WAIT ===================
+
+log("Waiting for firmware boot...")
+time.sleep(DEFAULT_BOOT_WAIT)
+read_available()
+
+# ===================== ENTER PASTE MODE ============
+
+log("Sending Ctrl-E (paste mode)")
+try:
+    p.stdin.write(b"\x05")   # Ctrl-E
+    p.stdin.flush()
+except Exception as e:
+    log(f"WARNING: Failed to send Ctrl-E: {e}")
+
+time.sleep(0.1)
+read_available()
+
+# ===================== SEND USER SCRIPT ============
+
+log("Sending user script")
+
+try:
+    with open(SCRIPT, "rb") as f:
+        p.stdin.write(f.read())
+    p.stdin.flush()
+except Exception as e:
+    log(f"ERROR: Failed to send script: {e}")
+    output_buffer += f"\nERROR sending script: {e}\n".encode()
+
+time.sleep(0.1)
+read_available()
+
+# ===================== EXECUTE SCRIPT ==============
+
+log("Sending Ctrl-D (execute)")
+try:
+    p.stdin.write(b"\x04")   # Ctrl-D
+    p.stdin.flush()
+except Exception as e:
+    log(f"WARNING: Failed to send Ctrl-D: {e}")
+
+# ===================== EXECUTION WINDOW ============
+
+exec_time = float(os.environ.get("PYAUTO_TIMEOUT", DEFAULT_EXEC_TIME))
+log(f"Execution window: {exec_time} seconds")
+
+start = time.time()
+while time.time() - start < exec_time:
+    if p.poll() is not None:
+        log("QEMU exited early")
+        break
+    read_available()
+    time.sleep(0.05)
+
+# ===================== FORCE TERMINATION ===========
+
+log("Terminating QEMU")
+
 try:
     if p.poll() is None:
-        p.terminate()
-        # give it a moment to exit
-        time.sleep(0.5)
-        if p.poll() is None:
-            p.kill()
-except Exception:
-    pass
+        os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+except Exception as e:
+    log(f"WARNING: Failed to kill QEMU: {e}")
 
-# Close master fd to signal reader thread to finish and join it
-try:
-    os.close(master)
-except Exception:
-    pass
+time.sleep(0.1)
+read_available()
 
-try:
-    t.join(timeout=1.0)
-except Exception:
-    pass
+# ===================== WRITE OUTPUT ================
 
-# Ensure stdout is flushed and exit
+final_output = output_buffer.decode(errors="ignore")
+
+if OUTPUT_FILE:
+    try:
+        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+            f.write(final_output)
+        log(f"Output written to {OUTPUT_FILE}")
+    except Exception as e:
+        log(f"ERROR: Failed to write output file: {e}")
+
+# Also emit output so Yaksh captures it
+log("=== BEGIN QEMU OUTPUT ===")
+sys.stdout.write(final_output)
+sys.stderr.write(final_output)
 sys.stdout.flush()
-sys.exit(0)
+sys.stderr.flush()
+log("=== END QEMU OUTPUT ===")
+
+# ===================== HARD EXIT ===================
+
+log("pyauto finished")
+os._exit(0)
