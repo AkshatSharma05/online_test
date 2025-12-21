@@ -1,151 +1,87 @@
-import os
-import tempfile
+#!/usr/bin/env python
+from __future__ import unicode_literals
 import subprocess
+import os
+from os.path import isfile
+
+# Local imports
 from .stdio_evaluator import StdIOEvaluator
-from .base_evaluator import BaseEvaluator
 from .file_utils import copy_files, delete_files
-from .error_messages import compare_outputs
+from .grader import CompilationError
 
-import sys
-class QemuStdIOEvaluator(StdIOEvaluator):
-    """
-    Evaluator that runs a MicroPython .py under your QEMU runner script.
 
-    Expected metadata keys:
-      - 'user_answer' (string) : the submitted python source
-      - 'file_paths' (list) : optional other files to copy into workdir
-      - 'runner_path' (str) : optional path to your qemu-runner script; if not provided,
-                              falls back to YAKSH_QEMU_RUNNER environment var or
-                              '/usr/local/bin/qemu_run.py'
-      - 'runner_args' (list/str) : optional extra args to the runner
-      - 'partial_grading' (bool)
-    """
-    # By default use the bundled pyauto runner inside the yaksh package
-    DEFAULT_RUNNER = os.environ.get(
-        'YAKSH_QEMU_RUNNER',
-        os.path.join(os.path.dirname(__file__), 'micropy_eval', 'pyauto.py')
-    )
+class MicroPythonStdIOEvaluator(StdIOEvaluator):
+    """Evaluates MicroPython StdIO based code"""
 
     def __init__(self, metadata, test_case_data):
         self.files = []
-        self.user_answer = metadata.get('user_answer', '')
-        self.file_paths = metadata.get('file_paths') or []
-        self.runner_path = metadata.get('runner_path') or self.DEFAULT_RUNNER
-        self.runner_args = metadata.get('runner_args') or ''
-        self.partial_grading = metadata.get('partial_grading', False)
 
+        # Metadata
+        self.user_answer = metadata.get('user_answer')
+        self.file_paths = metadata.get('file_paths')
+        self.partial_grading = metadata.get('partial_grading')
+
+        # Test case data
         self.expected_input = test_case_data.get('expected_input')
         self.expected_output = test_case_data.get('expected_output')
         self.weight = test_case_data.get('weight')
         self.hidden = test_case_data.get('hidden')
 
-        # prepare working dir
-        self.workdir = tempfile.mkdtemp(prefix='yaksh_qemu_')
+        # MicroPython binary path
+        self.micropython = os.path.join(
+            os.path.dirname(__file__),
+            'micropy_eval',
+            'micropython'
+        )
 
     def teardown(self):
-        # delete any files we created
+        if os.path.exists(self.submit_code_path):
+            os.remove(self.submit_code_path)
         if self.files:
-            try:
-                delete_files(self.files)
-            except Exception:
-                pass
-        # remove workdir
-        # try:
-        #     delete_files([self.workdir])
-        # except Exception:
-        #     pass
+            delete_files(self.files)
 
     def compile_code(self):
-        # For MicroPython, usually no compile step; just write the file.
-        self.submit_path = os.path.join(self.workdir, 'submission.py')
-        with open(self.submit_path, 'w') as f:
-            f.write(self.user_answer.lstrip())
+        # Write user code to file
+        self.submit_code_path = self.create_submit_code_file('main.py')
+        if not isfile(self.submit_code_path):
+            msg = "No file at %s or Incorrect path" % self.submit_code_path
+            return False, msg
 
-        # copy any supporting files into workdir
         if self.file_paths:
-            # copy_files returns list of created paths (existing file_utils handles)
             self.files = copy_files(self.file_paths)
-            # If copy_files copies relative to cwd, you may need to move them into workdir.
+
+        self.write_to_submit_code_file(
+            self.submit_code_path,
+            self.user_answer
+        )
+
+        # No compilation needed for MicroPython
         return True, None
 
     def check_code(self):
-        # Decide output file path
-        output_path = os.path.join(self.workdir, 'qemu_output.txt')
-        # Build command to call your runner. It must accept input path and output path.
-        # Example assumed runner CLI: python3 /path/to/qemu_run.py --input submission.py --output qemu_output.txt
-        # pyauto accepts positional script path and an --output option
-        cmd = [
-            'python3', self.runner_path,
-            self.submit_path,
-            '--output', output_path
-        ]
-        # add optional runner args if provided (string or list)
-        if isinstance(self.runner_args, (list, tuple)):
-            cmd += list(self.runner_args)
-        elif isinstance(self.runner_args, str) and self.runner_args:
-            cmd += self.runner_args.split()
+        success = False
+        mark_fraction = 0.0
 
-        # spawn runner with a preexec_fn to create its own process group so grader can kill on timeout
-        proc = subprocess.Popen(cmd,
-                                stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                preexec_fn=os.setpgrp)
-
-        # Wait for process to finish and capture stderr/stdout.
-        try:
-            stdout_bytes, stderr_bytes = proc.communicate()
-        except Exception:
-            # In case of unexpected errors, try to kill process group and re-raise
-            try:
-                os.killpg(os.getpgid(proc.pid), 9)
-            except Exception:
-                pass
-            raise
-
-        # If the runner returned non-zero, include stderr and any produced
-        # output in the error message so the UI can show expected vs actual.
-        if proc.returncode != 0:
-            err_msg = self._remove_null_substitute_char(
-                stderr_bytes.decode('utf-8', errors='ignore')
+        if not os.path.exists(self.micropython):
+            raise CompilationError(
+                "MicroPython executable not found on server"
             )
-            # Try to read any output the runner may have written
-            runner_output = ''
-            try:
-                with open(output_path, 'r', encoding='utf-8') as f:
-                    runner_output = f.read()
-            except Exception:
-                runner_output = ''
 
-            # Use the same compare_outputs helper so the error payload
-            # contains the expected/user output arrays and error_line_numbers
-            success_flag, msg = compare_outputs(self.expected_output or '',
-                                                runner_output,
-                                                self.expected_input)
-            # Attach runtime stderr so debugging is easier in the UI
-            msg.setdefault('runtime_stderr', err_msg)
-            # Ensure we mark this as a failing run
-            return False, msg, 0.0
+        # Run MicroPython
+        proc = subprocess.Popen(
+            [self.micropython, self.submit_code_path],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setpgrp
+        )
 
-        # Read output file written by the runner and compare with expected output
-        runner_output = ''
-        try:
-            with open(output_path, 'r', encoding='utf-8') as f:
-                runner_output = f.read()
-        except Exception:
-            runner_output = ''
+        success, err = self.evaluate_stdio(
+            self.user_answer,
+            proc,
+            self.expected_input,
+            self.expected_output
+        )
 
-        success, err = compare_outputs(self.expected_output or '',
-                                       runner_output,
-                                       self.expected_input)
         mark_fraction = 1.0 if self.partial_grading and success else 0.0
         return success, err, mark_fraction
-
-
-    def _read_output(self, output_path):
-        try:
-            with open(output_path, 'r') as f:
-                return f.read()
-        except Exception:
-            # If runner didn't create output file, capture stderr from runner
-            return ''

@@ -20,15 +20,12 @@ DEFAULT_BOOT_WAIT = 1.0      # seconds
 DEFAULT_EXEC_TIME = 3.0      # seconds
 READ_CHUNK = 1024
 
-FIRMWARE = os.environ.get(
-    "PYAUTO_FIRMWARE",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "firmware.bin")
-)
+FIRMWARE = "/Sites/online_test/yaksh_data/yaksh/micropy_eval/firmware.bin"
 
 # ===================== ARGS ========================
 
 parser = argparse.ArgumentParser(
-    description="Run MicroPython script under QEMU (grader-safe)"
+    description="Run MicroPython script under QEMU"
 )
 parser.add_argument(
     "script",

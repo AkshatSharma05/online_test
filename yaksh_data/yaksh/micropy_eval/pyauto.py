@@ -16,19 +16,17 @@ def log(msg):
 
 # ===================== CONFIG ======================
 
-DEFAULT_BOOT_WAIT = 1.0      # seconds
-DEFAULT_EXEC_TIME = 3.0      # seconds
-READ_CHUNK = 1024
+DEFAULT_EXEC_TIME = 3.0  # seconds
 
-FIRMWARE = os.environ.get(
-    "PYAUTO_FIRMWARE",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "firmware.bin")
+MICROPYTHON = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "micropython"
 )
 
 # ===================== ARGS ========================
 
 parser = argparse.ArgumentParser(
-    description="Run MicroPython script under QEMU (grader-safe)"
+    description="Run MicroPython script (grader-safe, no QEMU)"
 )
 parser.add_argument(
     "script",
@@ -49,13 +47,17 @@ OUTPUT_FILE = os.path.abspath(args.output) if args.output else None
 
 # ===================== VALIDATION ==================
 
-log("=== pyauto starting ===")
-log(f"Firmware path : {FIRMWARE}")
-log(f"Script path   : {SCRIPT}")
-log(f"Output file   : {OUTPUT_FILE}")
+log("=== pyauto starting (micropython mode) ===")
+log(f"MicroPython exe : {MICROPYTHON}")
+log(f"Script path     : {SCRIPT}")
+log(f"Output file     : {OUTPUT_FILE}")
 
-if not os.path.exists(FIRMWARE):
-    log(f"ERROR: Firmware not found: {FIRMWARE}")
+if not os.path.exists(MICROPYTHON):
+    log(f"ERROR: micropython executable not found: {MICROPYTHON}")
+    sys.exit(2)
+
+if not os.access(MICROPYTHON, os.X_OK):
+    log(f"ERROR: micropython is not executable")
     sys.exit(2)
 
 if not os.path.exists(SCRIPT):
@@ -69,114 +71,40 @@ if OUTPUT_FILE:
         log(f"ERROR: Failed to create output directory: {e}")
         sys.exit(2)
 
-# ===================== START QEMU ==================
-
-log("Starting QEMU...")
-
-try:
-    p = subprocess.Popen(
-        [
-            "qemu-system-xtensa",
-            "-nographic",
-            "-machine", "esp32",
-            "-drive", f"file={FIRMWARE},format=raw,if=mtd"
-        ],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        bufsize=0,
-        preexec_fn=os.setsid
-    )
-except Exception as e:
-    log(f"ERROR: Failed to start QEMU: {e}")
-    sys.exit(2)
-
-log(f"QEMU PID: {p.pid}")
-
-output_buffer = b""
-
-def read_available():
-    global output_buffer
-    try:
-        while True:
-            chunk = p.stdout.read(READ_CHUNK)
-            if not chunk:
-                break
-            output_buffer += chunk
-    except Exception:
-        pass
-
-# ===================== BOOT WAIT ===================
-
-log("Waiting for firmware boot...")
-time.sleep(DEFAULT_BOOT_WAIT)
-read_available()
-
-# ===================== ENTER PASTE MODE ============
-
-log("Sending Ctrl-E (paste mode)")
-try:
-    p.stdin.write(b"\x05")   # Ctrl-E
-    p.stdin.flush()
-except Exception as e:
-    log(f"WARNING: Failed to send Ctrl-E: {e}")
-
-time.sleep(0.1)
-read_available()
-
-# ===================== SEND USER SCRIPT ============
-
-log("Sending user script")
-
-try:
-    with open(SCRIPT, "rb") as f:
-        p.stdin.write(f.read())
-    p.stdin.flush()
-except Exception as e:
-    log(f"ERROR: Failed to send script: {e}")
-    output_buffer += f"\nERROR sending script: {e}\n".encode()
-
-time.sleep(0.1)
-read_available()
-
-# ===================== EXECUTE SCRIPT ==============
-
-log("Sending Ctrl-D (execute)")
-try:
-    p.stdin.write(b"\x04")   # Ctrl-D
-    p.stdin.flush()
-except Exception as e:
-    log(f"WARNING: Failed to send Ctrl-D: {e}")
-
-# ===================== EXECUTION WINDOW ============
+# ===================== RUN SCRIPT ==================
 
 exec_time = float(os.environ.get("PYAUTO_TIMEOUT", DEFAULT_EXEC_TIME))
-log(f"Execution window: {exec_time} seconds")
+log(f"Execution timeout: {exec_time} seconds")
 
-start = time.time()
-while time.time() - start < exec_time:
-    if p.poll() is not None:
-        log("QEMU exited early")
-        break
-    read_available()
-    time.sleep(0.05)
-
-# ===================== FORCE TERMINATION ===========
-
-log("Terminating QEMU")
+cmd = [MICROPYTHON, SCRIPT]
+log("Command: " + " ".join(cmd))
 
 try:
-    if p.poll() is None:
-        os.killpg(os.getpgid(p.pid), signal.SIGKILL)
-except Exception as e:
-    log(f"WARNING: Failed to kill QEMU: {e}")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        preexec_fn=os.setsid,
+        text=True
+    )
 
-time.sleep(0.1)
-read_available()
+    try:
+        stdout, stderr = proc.communicate(timeout=exec_time)
+    except subprocess.TimeoutExpired:
+        log("Execution timed out, killing process")
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        raise
+
+except subprocess.TimeoutExpired:
+    sys.stderr.write("ERROR: Execution timed out\n")
+    sys.exit(1)
+except Exception as e:
+    log(f"ERROR: Failed to execute micropython: {e}")
+    sys.exit(2)
 
 # ===================== WRITE OUTPUT ================
 
-final_output = output_buffer.decode(errors="ignore")
+final_output = stdout + stderr
 
 if OUTPUT_FILE:
     try:
@@ -186,15 +114,14 @@ if OUTPUT_FILE:
     except Exception as e:
         log(f"ERROR: Failed to write output file: {e}")
 
-# Also emit output so Yaksh captures it
-log("=== BEGIN QEMU OUTPUT ===")
+# Emit output so Yaksh captures it
+log("=== BEGIN OUTPUT ===")
 sys.stdout.write(final_output)
 sys.stderr.write(final_output)
 sys.stdout.flush()
 sys.stderr.flush()
-log("=== END QEMU OUTPUT ===")
-
-# ===================== HARD EXIT ===================
+log("=== END OUTPUT ===")
 
 log("pyauto finished")
-os._exit(0)
+
+sys.exit(proc.returncode)

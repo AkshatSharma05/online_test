@@ -76,6 +76,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /opt/qemu \
     && rm -rf /var/lib/apt/lists/*
 
+COPY docker/firmware/firmware.bin /Sites/online_test/yaksh_data/yaksh/micropy_eval/firmware.bin
+RUN chmod 644 /Sites/online_test/yaksh_data/yaksh/micropy_eval/firmware.bin
+
 WORKDIR /Sites/online_test
 
 ADD docker/Files/Start-codeserver.sh /Sites/Start-codeserver.sh
