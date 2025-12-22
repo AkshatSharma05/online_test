@@ -141,6 +141,7 @@ class QemuStdIOEvaluator(StdIOEvaluator):
         mark_fraction = 1.0 if self.partial_grading and success else 0.0
         return success, err, mark_fraction
 
+
     def _read_output(self, output_path):
         try:
             with open(output_path, 'r') as f:
