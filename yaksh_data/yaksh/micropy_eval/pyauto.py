@@ -48,7 +48,7 @@ OUTPUT_FILE = os.path.abspath(args.output) if args.output else None
 # ===================== VALIDATION ==================
 
 log("=== pyauto starting (micropython mode) ===")
-log(f"MicroPython exe : {MICROPYTHON}")
+log(f"MicroPython     : {MICROPYTHON}")
 log(f"Script path     : {SCRIPT}")
 log(f"Output file     : {OUTPUT_FILE}")
 

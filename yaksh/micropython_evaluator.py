@@ -5,8 +5,8 @@ from .stdio_evaluator import StdIOEvaluator
 from .base_evaluator import BaseEvaluator
 from .file_utils import copy_files, delete_files
 from .error_messages import compare_outputs
+import shutil
 
-import sys
 class QemuStdIOEvaluator(StdIOEvaluator):
     """
     Evaluator that runs a MicroPython .py under your QEMU runner script.
@@ -20,7 +20,6 @@ class QemuStdIOEvaluator(StdIOEvaluator):
       - 'runner_args' (list/str) : optional extra args to the runner
       - 'partial_grading' (bool)
     """
-    # By default use the bundled pyauto runner inside the yaksh package
     DEFAULT_RUNNER = os.environ.get(
         'YAKSH_QEMU_RUNNER',
         os.path.join(os.path.dirname(__file__), 'micropy_eval', 'pyauto.py')
@@ -49,24 +48,27 @@ class QemuStdIOEvaluator(StdIOEvaluator):
                 delete_files(self.files)
             except Exception:
                 pass
-        # remove workdir
-        # try:
-        #     delete_files([self.workdir])
-        # except Exception:
-        #     pass
 
     def compile_code(self):
-        # For MicroPython, usually no compile step; just write the file.
         self.submit_path = os.path.join(self.workdir, 'submission.py')
         with open(self.submit_path, 'w') as f:
             f.write(self.user_answer.lstrip())
 
-        # copy any supporting files into workdir
-        if self.file_paths:
-            # copy_files returns list of created paths (existing file_utils handles)
-            self.files = copy_files(self.file_paths)
-            # If copy_files copies relative to cwd, you may need to move them into workdir.
+        shim_src = os.path.join(
+            os.path.dirname(__file__),
+            'micropy_eval',
+            'machine.py'
+        )
+        shim_dst = os.path.join(self.workdir, 'machine.py')
+        # copy_files([shim_src], dest_dir=self.workdir)
+        shutil.copyfile(shim_src, shim_dst)
+
+        # # copy any supporting files into workdir
+        # if self.file_paths:
+        #     self.files = copy_files(self.file_paths, dest_dir=self.workdir)   
+
         return True, None
+
 
     def check_code(self):
         # Decide output file path
