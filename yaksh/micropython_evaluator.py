@@ -6,7 +6,8 @@ from .base_evaluator import BaseEvaluator
 from .file_utils import copy_files, delete_files
 from .error_messages import compare_outputs
 import shutil
-
+import sys
+import re
 class QemuStdIOEvaluator(StdIOEvaluator):
     """
     Evaluator that runs a MicroPython .py under your QEMU runner script.
@@ -69,10 +70,40 @@ class QemuStdIOEvaluator(StdIOEvaluator):
 
         return True, None
 
+        #GPIO Pin Detection
+    def _detect_gpio_pins(self, source_code):
+        pins = set(re.findall(r'Pin\s*\(\s*(\d+)', source_code))
+        if not pins:
+            return "No GPIO detected"
+        return ", ".join(f"GPIO{p}" for p in sorted(pins))
+    
+    #Function to store code output info
+    def _write_report(self, report_path, runner_output, pin_config, errors):
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write("RAW OUTPUT\n")
+            f.write("=============\n\n")
+            f.write(runner_output.strip() + "\n\n")
+
+            f.write("PIN_CONFIG\n")
+            f.write("================\n")
+            f.write(pin_config + "\n\n")
+
+            f.write("ERRORS\n")
+            if errors:
+                f.write(errors + "\n")
+            else:
+                f.write("No runtime errors\n")
+    
+    def _extract_runtime_error(self, output_text):
+        if "Traceback" in output_text or "Error" in output_text:
+            return output_text.strip()
+        return ""       
+
 
     def check_code(self):
         # Decide output file path
         output_path = os.path.join(self.workdir, 'qemu_output.txt')
+        report_path = os.path.join(self.workdir, 'micropython_report.txt') #File to store current output and GPIO Storage
         # Build command to call your runner. It must accept input path and output path.
         # Example assumed runner CLI: python3 /path/to/qemu_run.py --input submission.py --output qemu_output.txt
         # pyauto accepts positional script path and an --output option
@@ -127,6 +158,17 @@ class QemuStdIOEvaluator(StdIOEvaluator):
             # Attach runtime stderr so debugging is easier in the UI
             msg.setdefault('runtime_stderr', err_msg)
             # Ensure we mark this as a failing run
+            pin_config = self._detect_gpio_pins(self.user_answer)
+            errors = self._extract_runtime_error(runner_output)
+
+            self._write_report(report_path, runner_output, pin_config, errors)
+
+            # attach data for HTML
+            if isinstance(err, dict):
+                msg['raw_output'] = runner_output
+                msg['pin_config'] = pin_config
+                msg['runtime_errors'] = errors
+
             return False, msg, 0.0
 
         # Read output file written by the runner and compare with expected output
@@ -141,6 +183,18 @@ class QemuStdIOEvaluator(StdIOEvaluator):
                                        runner_output,
                                        self.expected_input)
         mark_fraction = 1.0 if self.partial_grading and success else 0.0
+        pin_config = self._detect_gpio_pins(self.user_answer)
+        errors = self._extract_runtime_error(runner_output)
+
+        self._write_report(report_path, runner_output, pin_config, errors)
+
+
+        # attach data for HTML
+        if isinstance(err, dict):
+            err['raw_output'] = runner_output
+            err['pin_config'] = pin_config
+            err['runtime_errors'] = errors
+
         return success, err, mark_fraction
 
 

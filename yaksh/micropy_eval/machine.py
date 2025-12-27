@@ -105,3 +105,37 @@ def reset():
 
 def deepsleep(ms=0):
     print(f"[SIM][machine] deepsleep({ms}) ignored")
+
+# =====================
+# Timer
+# =====================
+class Timer:
+    ONE_SHOT = 0
+    PERIODIC = 1
+
+    def __init__(self, id=0):
+        self.id = id
+        self.period = None
+        self.mode = None
+        self.callback = None
+        print(f"[SIM][Timer] Timer{self.id} created")
+
+    def init(self, period=0, mode=ONE_SHOT, callback=None):
+        self.period = period
+        self.mode = mode
+        self.callback = callback
+
+        mode_str = "ONE_SHOT" if mode == self.ONE_SHOT else "PERIODIC"
+        print(f"[SIM][Timer] Timer{self.id} init period={period} mode={mode_str}")
+
+        # SAFE callback invocation (once only)
+        if callback:
+            print(f"[SIM][Timer] Timer{self.id} callback invoked")
+            try:
+                callback(self)
+            except TypeError:
+                # Some users define callback without args
+                callback()
+
+    def deinit(self):
+        print(f"[SIM][Timer] Timer{self.id} deinit")
