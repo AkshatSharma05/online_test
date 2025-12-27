@@ -139,3 +139,57 @@ class Timer:
 
     def deinit(self):
         print(f"[SIM][Timer] Timer{self.id} deinit")
+
+    # =====================
+    # time module equivalents
+    # =====================
+    @staticmethod
+    def sleep(seconds):
+        print(f"[SIM][Timer] sleep({seconds}s)")
+
+    @staticmethod
+    def sleep_ms(ms):
+        print(f"[SIM][Timer] sleep_ms({ms}ms)")
+
+    @staticmethod
+    def sleep_us(us):
+        print(f"[SIM][Timer] sleep_us({us}us)")
+
+    # =====================
+    # ticks functions
+    # =====================
+    @staticmethod
+    def ticks_ms():
+        print("[SIM][Timer] ticks_ms()")
+        return 0
+
+    @staticmethod
+    def ticks_us():
+        print("[SIM][Timer] ticks_us()")
+        return 0
+
+    @staticmethod
+    def ticks_cpu():
+        print("[SIM][Timer] ticks_cpu()")
+        return 0
+
+    @staticmethod
+    def ticks_diff(ticks1, ticks2):
+        print(f"[SIM][Timer] ticks_diff({ticks1}, {ticks2})")
+        return ticks1 - ticks2
+
+    @staticmethod
+    def ticks_add(ticks, delta):
+        print(f"[SIM][Timer] ticks_add({ticks}, {delta})")
+        return ticks + delta
+
+    # =====================
+    # micropython.schedule abstraction
+    # =====================
+    @staticmethod
+    def schedule(func, arg):
+        print("[SIM][Timer] micropython.schedule()")
+        try:
+            func(arg)
+        except TypeError:
+            func()
