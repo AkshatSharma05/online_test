@@ -79,6 +79,13 @@ class QemuStdIOEvaluator(StdIOEvaluator):
             return "No GPIO detected"
         return ", ".join(f"GPIO{p}" for p in sorted(pins))
     
+    def _detect_temp_threshold(self, source_code):
+        match = re.search(r'temp_threshold\s*=\s*(\d+)', source_code)
+        if match:
+            return int(match.group(1))
+        return None
+
+    
     #Function to store code output info
     def _write_report(self, report_path, runner_output, pin_config, errors):
         with open(report_path, 'w', encoding='utf-8') as f:
@@ -103,6 +110,7 @@ class QemuStdIOEvaluator(StdIOEvaluator):
 
 
     def check_code(self):
+        temp_threshold = self._detect_temp_threshold(self.user_answer)
         # Decide output file path
         output_path = os.path.join(self.workdir, 'qemu_output.txt')
         report_path = os.path.join(self.workdir, 'micropython_report.txt') #File to store current output and GPIO Storage
@@ -119,13 +127,19 @@ class QemuStdIOEvaluator(StdIOEvaluator):
             cmd += list(self.runner_args)
         elif isinstance(self.runner_args, str) and self.runner_args:
             cmd += self.runner_args.split()
+        
+        env = os.environ.copy()
+        if temp_threshold is not None:
+            env["SIM_TEMP_INJECT"] = str(temp_threshold)
+
 
         # spawn runner with a preexec_fn to create its own process group so grader can kill on timeout
         proc = subprocess.Popen(cmd,
                                 stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
-                                preexec_fn=os.setpgrp)
+                                preexec_fn=os.setpgrp,
+                                env=env)
 
         # Wait for process to finish and capture stderr/stdout.
         try:
@@ -166,7 +180,7 @@ class QemuStdIOEvaluator(StdIOEvaluator):
             self._write_report(report_path, runner_output, pin_config, errors)
 
             # attach data for HTML
-            if isinstance(err, dict):
+            if isinstance(msg, dict):
                 msg['raw_output'] = runner_output
                 msg['pin_config'] = pin_config
                 msg['runtime_errors'] = errors

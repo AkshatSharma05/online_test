@@ -2,6 +2,7 @@
 # This file is ignored on ESP32
 
 import time
+import os
 import random
 
 # =====================
@@ -53,7 +54,13 @@ class ADC:
 
     def __init__(self, pin):
         self.pin = pin.id if isinstance(pin, Pin) else pin
-        self._value = 2048
+        self._forced_value = None
+        self._used = False
+
+        inject = os.getenv("SIM_TEMP_INJECT")
+        if inject is not None:
+            self._forced_value = int(inject)
+
         print(f"[SIM][ADC] GPIO{self.pin} initialized")
 
     def atten(self, _):
@@ -63,8 +70,11 @@ class ADC:
         pass
 
     def read(self):
-        print(f"[SIM][ADC] GPIO{self.pin} read -> {self._value}")
-        return self._value
+        value = self._forced_value
+        self._used = True
+        print(f"[SIM][ADC] GPIO{self.pin} read -> {value}")
+        return value
+
 
     # Non-ESP32 extension: test injection
     def _set(self, value):
