@@ -2,7 +2,7 @@
 # This overrides the real time module during evaluation
 # Non-blocking, syntax-validation only
 
-print("[SIM][time] module loaded")
+#print("[SIM][time] module loaded")
 
 # =====================
 # sleep functions
