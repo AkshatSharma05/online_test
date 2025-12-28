@@ -55,20 +55,22 @@ class QemuStdIOEvaluator(StdIOEvaluator):
         with open(self.submit_path, 'w') as f:
             f.write(self.user_answer.lstrip())
 
-        shim_src = os.path.join(
-            os.path.dirname(__file__),
-            'micropy_eval',
-            'machine.py'
-        )
-        shim_dst = os.path.join(self.workdir, 'machine.py')
-        # copy_files([shim_src], dest_dir=self.workdir)
-        shutil.copyfile(shim_src, shim_dst)
+        base = os.path.join(os.path.dirname(__file__), 'micropy_eval')
 
-        # # copy any supporting files into workdir
-        # if self.file_paths:
-        #     self.files = copy_files(self.file_paths, dest_dir=self.workdir)   
+        # copy machine.py
+        shutil.copyfile(
+            os.path.join(base, 'machine.py'),
+            os.path.join(self.workdir, 'machine.py')
+        )
+
+        #Copy time.py so `import time` uses fake module
+        shutil.copyfile(
+            os.path.join(base, 'time.py'),
+            os.path.join(self.workdir, 'time.py')
+        )
 
         return True, None
+
 
         #GPIO Pin Detection
     def _detect_gpio_pins(self, source_code):
