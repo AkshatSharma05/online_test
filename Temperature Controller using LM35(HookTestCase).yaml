@@ -1,0 +1,169 @@
+---
+summary: |-
+  Temperature Controller using LM35 (ESP32 – MicroPython)
+type: |-
+  code
+language: |-
+  micropython
+description: |-
+  <p>Write a MicroPython program for ESP32 that reads a temperature value using an LM35 connected to pin 34 and turns ON an LED at pin 2 when temperature reaches 20°C.</p>
+  <p><strong>Requirements:</strong></p>
+  <ul>
+  <li>Create an ADC object using <code>ADC(Pin(34))</code></li>
+  <li>Read the ADC value and convert it to temperature in Celsius</li>
+  <li>Create a Pin object for the LED at pin 2</li>
+  <li>If temperature &ge; 20°C, turn LED ON else OFF</li>
+  </ul>
+  <p><strong>Note:</strong> ADC values simulate LM35 output (10 mV/°C)</p>
+points: 2.0
+testcase:
+- test_case_type: |-
+    hooktestcase
+  hook_code: |-
+    import sys
+    import types
+    import textwrap
+
+    def check_answer(user_answer):
+
+        # ----------------------------
+        # Fake machine module
+        # ----------------------------
+        class Pin:
+            OUT = 1
+            IN = 0
+            def __init__(self, pin, mode=None):
+                self.pin = pin
+                self.mode = mode
+                self.state = 0
+            def on(self):
+                self.state = 1
+            def off(self):
+                self.state = 0
+
+        class ADC:
+
+            WIDTH_9BIT = 9
+            WIDTH_10BIT = 10
+            WIDTH_11BIT = 11
+            WIDTH_12BIT = 12
+
+            ATTEN_0DB = 0
+            ATTEN_2_5DB = 1
+            ATTEN_6DB = 2
+            ATTEN_11DB = 3
+
+            def __init__(self, pin):
+                self.pin = pin
+                self._value = 0
+            def read(self):
+                return self._value
+            def atten(self, x): pass
+            def width(self, x): pass
+
+        fake_machine = types.ModuleType("machine")
+        fake_machine.Pin = Pin
+        fake_machine.ADC = ADC
+        sys.modules["machine"] = fake_machine
+
+        # ----------------------------
+        # Execute student code
+        # ----------------------------
+        try:
+            exec_env = {}
+            exec(textwrap.dedent(user_answer), exec_env)
+        except Exception as e:
+            return False, f"Runtime error: {e}", 0.0
+
+        # ----------------------------
+        # Detect ADC and LED objects
+        # ----------------------------
+        adc_objs = [v for v in exec_env.values() if isinstance(v, ADC)]
+        pin_objs = [v for v in exec_env.values() if isinstance(v, Pin)]
+
+        if not adc_objs:
+            return False, "ADC not initialized", 0.0
+        if not pin_objs:
+            return False, "LED not initialized", 0.0
+
+        adc = adc_objs[0]
+        led = pin_objs[0]
+
+        Vref = 3.3
+
+        # ----------------------------
+        # Test below threshold (19°C)
+        # ----------------------------
+        adc._value = int(19 / 100 * 4095 / Vref)
+        temp_c = (adc._value / 4095) * Vref * 100
+        if temp_c >= 20:
+            led.on()
+        else:
+            led.off()
+        if led.state != 0:
+            return False, "LED should be OFF below threshold (19°C)", 0.0
+
+        # ----------------------------
+        # Test above threshold (21°C)
+        # ----------------------------
+        adc._value = int(21 / 100 * 4095 / Vref)
+        temp_c = (adc._value / 4095) * Vref * 100
+        if temp_c >= 20:
+            led.on()
+        else:
+            led.off()
+        if led.state != 1:
+            return False, "LED should be ON above threshold (21°C)", 0.0
+
+        return True, "LM35 ADC logic and LED control correct", 1.0
+  hidden: false
+  weight: 1.0
+active: true
+files: []
+grade_assignment_upload: false
+min_time: 0
+partial_grading: false
+snippet: |-
+  from machine import ADC, Pin
+
+  adc = ADC(Pin(34))
+  adc.atten(ADC.ATTEN_11DB)
+  adc.width(ADC.WIDTH_12BIT)
+
+  led = Pin(2, Pin.OUT)
+
+  raw_value = adc.read()
+  Vref = 3.3
+  temp_c = (raw_value / 4095) * Vref * 100
+
+  temp_threshold = 20
+  if temp_c >= temp_threshold:
+      led.on()
+  else:
+      led.off()
+solution: |-
+  from machine import ADC, Pin
+
+  adc = ADC(Pin(34))
+  adc.atten(ADC.ATTN_11DB)
+  adc.width(ADC.WIDTH_12BIT)
+
+  led = Pin(2, Pin.OUT)
+
+  raw_value = adc.read()
+  Vref = 3.3
+  temp_c = (raw_value / 4095) * Vref * 100
+
+  temp_threshold = 20
+  if temp_c >= temp_threshold:
+      led.on()
+  else:
+      led.off()
+tags:
+- esp32
+- micropython
+- adc
+- temperature
+- lm35
+topic: sensors
+---

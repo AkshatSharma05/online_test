@@ -1,0 +1,120 @@
+---
+summary: |-
+  Timer Callback using MicroPython (ESP32 Simulation)(HookTestCase)
+
+type: |-
+  code
+
+language: |-
+  micropython
+
+description: |-
+  <p>Write a MicroPython program that demonstrates the use of a <strong>Timer callback</strong>.</p>
+
+  <p><strong>Requirements:</strong></p>
+  <ul>
+    <li>Import <code>Timer</code> from the <code>machine</code> module</li>
+    <li>Create a callback function that modifies a variable when triggered</li>
+    <li>Initialize a timer using <code>Timer(0)</code></li>
+    <li>Configure the timer using <code>init()</code> with a callback</li>
+  </ul>
+
+  <p>The callback should update a variable named <code>triggered</code> when executed.</p>
+
+points: 2.0
+
+testcase:
+- test_case_type: |-
+    hooktestcase
+
+  hook_code: |-
+    import sys
+    import types
+    import textwrap
+
+    def check_answer(user_answer):
+
+        # ----------------------------
+        # Fake Timer implementation
+        # ----------------------------
+        class Timer:
+            ONE_SHOT = 0
+            PERIODIC = 1
+
+            def __init__(self, timer_id):
+                self.timer_id = timer_id
+                self.callback = None
+
+            def init(self, period, mode, callback):
+                self.period = period
+                self.mode = mode
+                self.callback = callback
+
+                # Simulate timer firing immediately
+                if callable(self.callback):
+                    self.callback(self)
+
+        # Inject fake machine module
+        fake_machine = types.ModuleType("machine")
+        fake_machine.Timer = Timer
+        sys.modules["machine"] = fake_machine
+
+        # Execute student code
+        try:
+            user_answer = textwrap.dedent(user_answer)
+            exec_env = {}
+            exec(user_answer, exec_env)
+        except Exception as e:
+            return False, f"Runtime error: {e}", 0.0
+
+        # Validate callback behavior
+        if "triggered" not in exec_env:
+            return False, "Callback did not modify any state (missing 'triggered' variable)", 0.0
+
+        if exec_env["triggered"] is not True:
+            return False, "Callback executed but did not update state correctly", 0.0
+
+        return True, "Callback executed and state updated correctly", 1.0
+
+  hidden: false
+  weight: 1.0
+
+active: true
+files: []
+grade_assignment_upload: false
+min_time: 0
+partial_grading: false
+
+snippet: |-
+  from machine import Timer
+
+  triggered = False
+
+  def timeout(t):
+      global triggered
+      triggered = True
+
+  tim = Timer(0)
+  tim.init(period=1000, mode=Timer.ONE_SHOT, callback=timeout)
+
+solution: |-
+  from machine import Timer
+
+  triggered = False
+
+  def timeout(t):
+      global triggered
+      triggered = True
+
+  tim = Timer(0)
+  tim.init(period=1000, mode=Timer.ONE_SHOT, callback=timeout)
+
+tags:
+- micropython
+- esp32
+- timer
+- callback
+- embedded
+- interrupt
+
+topic: Timers and Callbacks

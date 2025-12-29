@@ -1,0 +1,126 @@
+---
+summary: |-
+  PWM Motor Control using ESP32 (MicroPython)
+
+type: |-
+  code
+
+language: |-
+  micropython
+
+description: |-
+  <p>Write a MicroPython program to control a motor using PWM on an ESP32.</p>
+
+  <p><strong>Requirements:</strong></p>
+  <ul>
+    <li>Create a PWM object using <code>PWM(Pin(5))</code></li>
+    <li>Set the PWM frequency to <strong>1000 Hz</strong></li>
+    <li>Set the duty cycle to <strong>512</strong></li>
+  </ul>
+
+  <p>The code should use standard MicroPython syntax and should run on real ESP32 hardware.</p>
+
+points: 2.0
+
+testcase:
+- test_case_type: |-
+    hooktestcase
+
+  hook_code: |-
+    def check_answer(user_answer):
+        import sys
+        import types
+        import textwrap
+
+        # -----------------------------
+        # Fake machine module
+        # -----------------------------
+        class Pin:
+            def __init__(self, pin):
+                self.pin = pin
+
+        class PWM:
+            def __init__(self, pin):
+                self.pin = pin
+                self._freq = None
+                self._duty = None
+
+            def freq(self, value=None):
+                if value is not None:
+                    self._freq = value
+                return self._freq
+
+            def duty(self, value=None):
+                if value is not None:
+                    self._duty = value
+                return self._duty
+
+        fake_machine = types.ModuleType("machine")
+        fake_machine.Pin = Pin
+        fake_machine.PWM = PWM
+        sys.modules["machine"] = fake_machine
+
+        # -----------------------------
+        # Execute student submission
+        # -----------------------------
+        try:
+            exec_env = {}
+            exec(textwrap.dedent(user_answer), exec_env)
+        except Exception as e:
+            return False, f"Runtime error: {e}", 0.0
+
+        # -----------------------------
+        # Validate behavior
+        # -----------------------------
+        pwm_objs = [v for v in exec_env.values() if isinstance(v, PWM)]
+
+        if not pwm_objs:
+            return False, "PWM object not created", 0.0
+
+        pwm = pwm_objs[0]
+
+        if pwm._freq != 1000:
+            return False, "PWM frequency must be 1000 Hz", 0.0
+
+        if pwm._duty != 512:
+            return False, "PWM duty cycle must be 512", 0.0
+
+        return True, "Correct PWM configuration", 1.0
+
+  hidden: false
+  weight: 1.0
+
+active: true
+
+files: []
+
+grade_assignment_upload: false
+
+min_time: 0
+
+partial_grading: false
+
+snippet: |-
+  from machine import Pin, PWM
+
+  motor = PWM(Pin(5))
+  motor.freq(1000)
+  motor.duty(512)
+
+solution: |-
+  from machine import Pin, PWM
+
+  motor = PWM(Pin(5))
+  motor.freq(1000)
+  motor.duty(512)
+
+tags:
+- esp32
+- micropython
+- pwm
+- motor
+- embedded
+- hardware
+
+topic: |
+  ESP32 PWM Motor Control
