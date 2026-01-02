@@ -131,7 +131,14 @@ class QemuStdIOEvaluator(StdIOEvaluator):
         env = os.environ.copy()
         if temp_threshold is not None:
             env["SIM_TEMP_INJECT"] = str(temp_threshold)
+        else:
+            if self.expected_input is None:
+                raise ValueError(
+                    "StdIO test case must define expected_input "
+                    "(ADC value to inject)"
+                )
 
+            env["SIM_TEMP_INJECT"] = str(self.expected_input)
 
         # spawn runner with a preexec_fn to create its own process group so grader can kill on timeout
         proc = subprocess.Popen(cmd,
