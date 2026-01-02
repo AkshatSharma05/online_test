@@ -73,6 +73,15 @@ class ADC:
         value = self._forced_value
         self._used = True
         print(f"[SIM][ADC] GPIO{self.pin} read -> {value}")
+        if self._forced_value is not None:
+            value = int(self._forced_value)
+        elif hasattr(self, "_value"):
+            value = int(self._value)
+        else:
+            value = 2048  # Safe midpoint fallback
+
+        self._used = True
+        print(f"[SIM][ADC] GPIO{self.pin} read -> {value}")
         return value
 
 
