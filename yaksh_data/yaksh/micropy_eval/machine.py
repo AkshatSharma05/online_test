@@ -1,6 +1,9 @@
-import time
-import random
+# machine.py (Unix MicroPython ONLY)
+# This file is ignored on ESP32
 
+import time
+import os
+import random
 
 # =====================
 # Pin
@@ -51,7 +54,13 @@ class ADC:
 
     def __init__(self, pin):
         self.pin = pin.id if isinstance(pin, Pin) else pin
-        self._value = 2048
+        self._forced_value = None
+        self._used = False
+
+        inject = os.getenv("SIM_TEMP_INJECT")
+        if inject is not None:
+            self._forced_value = int(inject)
+
         print(f"[SIM][ADC] GPIO{self.pin} initialized")
 
     def atten(self, _):
@@ -61,8 +70,11 @@ class ADC:
         pass
 
     def read(self):
-        print(f"[SIM][ADC] GPIO{self.pin} read -> {self._value}")
-        return self._value
+        value = self._forced_value
+        self._used = True
+        print(f"[SIM][ADC] GPIO{self.pin} read -> {value}")
+        return value
+
 
     # Non-ESP32 extension: test injection
     def _set(self, value):
@@ -94,8 +106,100 @@ class PWM:
     def deinit(self):
         print(f"[SIM][PWM] GPIO{self.pin} deinit")
 
+
+# =====================
+# Time-related stubs
+# =====================
 def reset():
     print("[SIM][machine] reset() ignored")
 
 def deepsleep(ms=0):
     print(f"[SIM][machine] deepsleep({ms}) ignored")
+
+# =====================
+# Timer
+# =====================
+class Timer:
+    ONE_SHOT = 0
+    PERIODIC = 1
+
+    def __init__(self, id=0):
+        self.id = id
+        self.period = None
+        self.mode = None
+        self.callback = None
+        print(f"[SIM][Timer] Timer{self.id} created")
+
+    def init(self, period=0, mode=ONE_SHOT, callback=None):
+        self.period = period
+        self.mode = mode
+        self.callback = callback
+
+        mode_str = "ONE_SHOT" if mode == self.ONE_SHOT else "PERIODIC"
+        print(f"[SIM][Timer] Timer{self.id} init period={period} mode={mode_str}")
+
+        # SAFE callback invocation (once only)
+        if callback:
+            print(f"[SIM][Timer] Timer{self.id} callback invoked")
+            try:
+                callback(self)
+            except TypeError:
+                # Some users define callback without args
+                callback()
+
+    def deinit(self):
+        print(f"[SIM][Timer] Timer{self.id} deinit")
+
+    # =====================
+    # time module equivalents
+    # =====================
+    @staticmethod
+    def sleep(seconds):
+        print(f"[SIM][Timer] sleep({seconds}s)")
+
+    @staticmethod
+    def sleep_ms(ms):
+        print(f"[SIM][Timer] sleep_ms({ms}ms)")
+
+    @staticmethod
+    def sleep_us(us):
+        print(f"[SIM][Timer] sleep_us({us}us)")
+
+    # =====================
+    # ticks functions
+    # =====================
+    @staticmethod
+    def ticks_ms():
+        print("[SIM][Timer] ticks_ms()")
+        return 0
+
+    @staticmethod
+    def ticks_us():
+        print("[SIM][Timer] ticks_us()")
+        return 0
+
+    @staticmethod
+    def ticks_cpu():
+        print("[SIM][Timer] ticks_cpu()")
+        return 0
+
+    @staticmethod
+    def ticks_diff(ticks1, ticks2):
+        print(f"[SIM][Timer] ticks_diff({ticks1}, {ticks2})")
+        return ticks1 - ticks2
+
+    @staticmethod
+    def ticks_add(ticks, delta):
+        print(f"[SIM][Timer] ticks_add({ticks}, {delta})")
+        return ticks + delta
+
+    # =====================
+    # micropython.schedule abstraction
+    # =====================
+    @staticmethod
+    def schedule(func, arg):
+        print("[SIM][Timer] micropython.schedule()")
+        try:
+            func(arg)
+        except TypeError:
+            func()

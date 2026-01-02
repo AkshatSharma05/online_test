@@ -62,5 +62,6 @@ code_evaluators = {
     "micropython": {
         "stdiobasedtestcase":
         "yaksh.micropython_evaluator.QemuStdIOEvaluator",
+        "hooktestcase": "yaksh.hook_evaluator.HookEvaluator"
     }
 }
