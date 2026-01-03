@@ -1,6 +1,6 @@
 Yaksh
 =====
-
+The questions for hooktestcase and STDIO Testcase are in the HookTestCase.zip and STDIOTestCase.zip
 |Build Status| |Documentation Status| |Version Status| |Coverage Status|
 
 To get an overview of the Yaksh interface please refer to the user documentation at `Yaksh Docs <http://yaksh.readthedocs.io>`_
