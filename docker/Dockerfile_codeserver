@@ -1,27 +1,15 @@
 FROM python:3.7-slim
 
-MAINTAINER FOSSEE <pythonsupport@fossee.in>
-
 # System dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    sudo \
-    default-jre \
-    default-jdk \
-    default-libmysqlclient-dev \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+apt-get install git python3-pip default-libmysqlclient-dev sudo default-jre default-jdk -y 
 
 VOLUME /Sites/online_test
 
-# Copy requirements
-# requirements files live in the repo's top-level `requirements/` directory
 ADD requirements/requirements-* /tmp/
 
-# Upgrade pip first (IMPORTANT)
 RUN pip install --upgrade pip setuptools wheel
 
-# Install Python dependencies
 RUN pip install -r /tmp/requirements-codeserver.txt
 
 # Create directories

@@ -3,6 +3,7 @@ import sys
 import traceback
 import os
 import psutil
+import importlib
 
 # Local imports
 from .file_utils import copy_files, delete_files
@@ -33,6 +34,22 @@ class HookEvaluator(BaseEvaluator):
             delete_files(self.files)
         if self.assign_files:
             delete_files(self.assign_files)
+    
+    def _inject_micropy_hook(self):
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = current_dir
+
+        if base_dir not in sys.path:
+            sys.path.insert(0, base_dir)
+
+        import micropy_hook.machine as machine
+        import micropy_hook.time as time
+
+        # Register under the expected MicroPython name
+        sys.modules["time"] = time
+        sys.modules["machine"] = machine
+
 
     def check_code(self):
         """ Function evaluates user answer by running a python based hook code
@@ -61,6 +78,7 @@ class HookEvaluator(BaseEvaluator):
             self.assign_files = copy_files(self.assignment_files)
         success = False
         mark_fraction = 0.0
+        self._inject_micropy_hook() ## Micropython Hook
         try:
             _tests = compile(self.hook_code, '<string>', mode='exec')
             hook_scope = {}

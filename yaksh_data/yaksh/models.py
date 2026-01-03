@@ -64,6 +64,7 @@ languages = (
         ("cpp", "C++ Language"),
         ("java", "Java Language"),
         ("scilab", "Scilab"),
+        ("micropython", "MicroPython"),
         ("r", "R"),
         ("other", "Other")
     )
@@ -1400,6 +1401,11 @@ class Question(models.Model):
 
     tc_code_types = {
         "python": [
+            ("standardtestcase", "Standard TestCase"),
+            ("stdiobasedtestcase", "StdIO TestCase"),
+            ("hooktestcase", "Hook TestCase")
+        ],
+        "micropython": [
             ("standardtestcase", "Standard TestCase"),
             ("stdiobasedtestcase", "StdIO TestCase"),
             ("hooktestcase", "Hook TestCase")
